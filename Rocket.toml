@@ -1,0 +1,2 @@
+[default.databases.school]
+url = "/home/rootkill/rust_all/the-boring-school/school.db"
