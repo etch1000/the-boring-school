@@ -1,3 +1,4 @@
+mod auth;
 mod models;
 mod schema;
 
@@ -7,12 +8,23 @@ extern crate rocket;
 #[macro_use]
 extern crate diesel;
 
+use auth::*;
 use diesel::prelude::*;
+use dotenvy::dotenv;
 use models::*;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use schema::*;
-use the_boring_school::establish_connection;
+use std::env;
+
+pub fn establish_connection() -> SqliteConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    SqliteConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("Error connecting to {database_url}"))
+}
 
 #[get("/")]
 fn home_page() -> &'static str {
@@ -22,22 +34,30 @@ fn home_page() -> &'static str {
 // ACCESSIBLE TO: Principal & Teacher
 #[post("/add_student", format = "json", data = "<new_student>")]
 async fn add_student(
+    auth: Claims,
     new_student: Json<Student>,
 ) -> Result<status::Created<String>, status::Unauthorized<String>> {
-    let c = establish_connection();
+    match auth.id {
+        3 => {
+            let c = establish_connection();
 
-    let res = diesel::insert_into(students::table)
-        .values(new_student.into_inner())
-        .execute(&c);
+            let res = diesel::insert_into(students::table)
+                .values(new_student.into_inner())
+                .execute(&c);
 
-    if res == Ok(1) {
-        Ok(status::Created::new(
-            "Student successfully added to the School",
-        ))
-    } else {
-        Err(status::Unauthorized(Some(String::from(
-            "You are not allowed to do that action without proper auth token",
-        ))))
+            if res == Ok(1) {
+                Ok(status::Created::new(
+                    "Student successfully added to the School",
+                ))
+            } else {
+                Err(status::Unauthorized(Some(String::from(
+                    "You are not allowed to do that action without proper auth token",
+                ))))
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not authorized to do that",
+        )))),
     }
 }
 
@@ -56,7 +76,7 @@ async fn add_teacher(
         Ok(status::Created::new("Teacher added Successfully"))
     } else {
         Err(status::Unauthorized(Some(String::from(
-            "You are not allowed to do that action without proper auth token",
+            "You are not allowed to do that",
         ))))
     }
 }
@@ -70,28 +90,25 @@ async fn get_all_teachers() -> Json<Vec<Teacher>> {
 
 // ACCESSIBLE TO: Principal & Teacher
 #[get("/all_students")]
-async fn get_all_student() -> Json<Vec<(String, i32, i32)>> {
-    let c = establish_connection();
-    Json(
-        students::table
-            .select((students::name, students::class, students::roll_number))
-            .load::<(String, i32, i32)>(&c)
-            .unwrap(),
-    )
+async fn get_all_student(
+    auth: Claims,
+) -> Result<Json<Vec<(String, i32, i32)>>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            Ok(Json(
+                students::table
+                    .select((students::name, students::class, students::roll_number))
+                    .load::<(String, i32, i32)>(&c)
+                    .unwrap(),
+            ))
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
 }
 
-
-pub enum Role {
-    Principal,
-    Teacher,
-    Student,
-}
-
-pub struct Claim {
-    pub id: Role,
-    pub sub: String,
-    pub exp: u128,
-}
 // ACCESSIBLE TO: ALL
 #[get("/?<class>&<roll_number>")]
 async fn get_result(class: i32, roll_number: i32) -> Json<Option<Student>> {
