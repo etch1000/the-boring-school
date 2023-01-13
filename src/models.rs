@@ -1,9 +1,10 @@
 use crate::schema::{students, teachers};
 use diesel::{Insertable, Queryable};
 use rocket::serde::{Deserialize, Serialize};
+use rocket_okapi::JsonSchema;
 use rocket_sync_db_pools::{database, diesel::SqliteConnection};
 
-#[derive(Queryable, Insertable, Serialize, Deserialize)]
+#[derive(Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = teachers)]
 #[serde(crate = "rocket::serde")]
 pub struct Teacher {
@@ -12,7 +13,7 @@ pub struct Teacher {
     pub course: String,
 }
 
-#[derive(Debug, Queryable, Insertable, Serialize, Deserialize)]
+#[derive(Debug, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = students)]
 #[serde(crate = "rocket::serde")]
 pub struct Student {
