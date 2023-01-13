@@ -34,38 +34,41 @@ fn home_page() -> &'static str {
 // ACCESSIBLE TO: Principal & Teacher
 #[post("/add_student", format = "json", data = "<new_student>")]
 async fn add_student(
-    auth: Claims,
+    _auth: Claims,
     new_student: Json<Student>,
 ) -> Result<status::Created<String>, status::Unauthorized<String>> {
-    match auth.id {
-        3 => {
-            let c = establish_connection();
+    // match auth.id {
+    //     3 | 2 => {
+    let c = establish_connection();
 
-            let res = diesel::insert_into(students::table)
-                .values(new_student.into_inner())
-                .execute(&c);
+    let res = diesel::insert_into(students::table)
+        .values(new_student.into_inner())
+        .execute(&c);
 
-            if res == Ok(1) {
-                Ok(status::Created::new(
-                    "Student successfully added to the School",
-                ))
-            } else {
-                Err(status::Unauthorized(Some(String::from(
-                    "You are not allowed to do that action without proper auth token",
-                ))))
-            }
-        }
-        _ => Err(status::Unauthorized(Some(String::from(
-            "You are not authorized to do that",
-        )))),
+    if res == Ok(1) {
+        Ok(status::Created::new(
+            "Student successfully added to the School",
+        ))
+    } else {
+        Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that action without proper auth token",
+        ))))
     }
+    //     }
+    //     _ => Err(status::Unauthorized(Some(String::from(
+    //         "You are not authorized to do that",
+    //     )))),
+    // }
 }
 
 // ACCESSIBLE TO: Principal
 #[post("/add_teacher", format = "json", data = "<new_teacher>")]
 async fn add_teacher(
+    _auth: Claims,
     new_teacher: Json<Teacher>,
 ) -> Result<status::Created<String>, status::Unauthorized<String>> {
+    // match auth.id {
+    //     3 => {
     let c = establish_connection();
 
     let res = diesel::insert_into(teachers::table)
@@ -79,6 +82,11 @@ async fn add_teacher(
             "You are not allowed to do that",
         ))))
     }
+    //     }
+    //     _ => Err(status::Unauthorized(Some(String::from(
+    //         "You are not authorized to do that",
+    //     )))),
+    // }
 }
 
 // ACCESSIBLE TO: ALL
@@ -91,22 +99,22 @@ async fn get_all_teachers() -> Json<Vec<Teacher>> {
 // ACCESSIBLE TO: Principal & Teacher
 #[get("/all_students")]
 async fn get_all_student(
-    auth: Claims,
+    _auth: Claims,
 ) -> Result<Json<Vec<(String, i32, i32)>>, status::Unauthorized<String>> {
-    match auth.id {
-        3 | 2 => {
-            let c = establish_connection();
-            Ok(Json(
-                students::table
-                    .select((students::name, students::class, students::roll_number))
-                    .load::<(String, i32, i32)>(&c)
-                    .unwrap(),
-            ))
-        }
-        _ => Err(status::Unauthorized(Some(String::from(
-            "You are not allowed to do that",
-        )))),
-    }
+    // match auth.id {
+    //     3 | 2 => {
+    let c = establish_connection();
+    Ok(Json(
+        students::table
+            .select((students::name, students::class, students::roll_number))
+            .load::<(String, i32, i32)>(&c)
+            .unwrap(),
+    ))
+    //     }
+    //     _ => Err(status::Unauthorized(Some(String::from(
+    //         "You are not allowed to do that",
+    //     )))),
+    // }
 }
 
 // ACCESSIBLE TO: ALL

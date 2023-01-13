@@ -33,7 +33,7 @@ impl<'r> FromRequest<'r> for Claims {
 
         let fail_header = "this_is_a_legit_jwt_trust_me_bro";
 
-        let result = if let Some(header) = header.strip_prefix("Bearer") {
+        let result = if let Some(header) = header.strip_prefix("Bearer ") {
             decode_jwt::<Claims>(header, &DECODE_KEY)
         } else {
             jwt::decode(fail_header, &DECODE_KEY, &jwt::Validation::default())
