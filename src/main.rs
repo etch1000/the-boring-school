@@ -96,6 +96,34 @@ async fn add_teacher(
     }
 }
 
+// ACCESSIBLE TO: PRINCIPAL & TEACHER
+#[openapi(tag = "AddOp")]
+#[post("/add_grade", format = "json", data = "<grade_record>")]
+async fn add_grade(
+    auth: Claims,
+    grade_record: Json<Grade>,
+) -> Result<status::Created<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+
+            let res = diesel::insert_into(grades::table)
+                .values(grade_record.into_inner())
+                .execute(&c);
+            if res == Ok(1) {
+                Ok(status::Created::new("Grade added successfully"))
+            } else {
+                Err(status::Unauthorized(Some(String::from(
+                    "You are not allowed to do that",
+                ))))
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
 // ACCESSIBLE TO: ALL
 #[openapi(tag = "GetOp")]
 #[get("/all_teachers")]
@@ -109,14 +137,14 @@ async fn get_all_teachers() -> Json<Vec<Teacher>> {
 #[get("/all_students")]
 async fn get_all_student(
     auth: Claims,
-) -> Result<Json<Vec<(String, i32, i32)>>, status::Unauthorized<String>> {
+) -> Result<Json<Vec<(String, i32)>>, status::Unauthorized<String>> {
     match auth.id {
         3 | 2 => {
             let c = establish_connection();
             Ok(Json(
                 students::table
-                    .select((students::name, students::class, students::roll_number))
-                    .load::<(String, i32, i32)>(&c)
+                    .select((students::student_name, students::student_id))
+                    .load::<(String, i32)>(&c)
                     .unwrap(),
             ))
         }
@@ -128,15 +156,26 @@ async fn get_all_student(
 
 // ACCESSIBLE TO: ALL
 #[openapi(tag = "GetOp")]
-#[get("/result/<class>/<roll_number>")]
-async fn get_result(class: i32, roll_number: i32) -> Json<Option<Student>> {
+#[get("/student/<student_id>")]
+async fn get_student(student_id: i32) -> Json<Option<Student>> {
     let c = establish_connection();
     Json(
         students::table
-            .filter(students::class.eq(class))
-            .filter(students::roll_number.eq(roll_number))
+            .filter(students::student_id.eq(student_id))
             .first::<Student>(&c)
             .ok(),
+    )
+}
+
+#[openapi(tag = "GetOp")]
+#[get("/grades/<student_id>")]
+async fn get_grades(student_id: i32) -> Json<Vec<Grade>> {
+    let c = establish_connection();
+    Json(
+        grades::table
+            .filter(grades::student_id.eq(student_id))
+            .load(&c)
+            .unwrap(),
     )
 }
 
@@ -151,9 +190,11 @@ fn rocket() -> _ {
                 home_page,
                 add_student,
                 add_teacher,
+                add_grade,
                 get_all_student,
                 get_all_teachers,
-                get_result
+                get_student,
+                get_grades,
             ],
         )
 }
