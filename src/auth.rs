@@ -1,7 +1,7 @@
 use dotenvy::dotenv;
 use jsonwebtoken as jwt;
 use okapi::openapi3::{
-    MediaType, Object, Response as OpenApiResponse, Responses, SecurityRequirement, SecurityScheme,
+    Object, Responses, SecurityRequirement, SecurityScheme,
     SecuritySchemeData,
 };
 use rocket::{
@@ -10,7 +10,7 @@ use rocket::{
     request::{FromRequest, Request},
     serde::{Deserialize, DeserializeOwned, Serialize},
 };
-use rocket_okapi::{gen::OpenApiGenerator, request::OpenApiFromRequest};
+use rocket_okapi::request::OpenApiFromRequest;
 use schemars::JsonSchema;
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -83,10 +83,7 @@ impl<'r> OpenApiFromRequest<'r> for Claims {
     fn get_responses(
         _gen: &mut rocket_okapi::gen::OpenApiGenerator,
     ) -> rocket_okapi::Result<Responses> {
-        use okapi::openapi3::RefOr;
-
         Ok(Responses {
-            responses: okapi::map! {"401".to_owned() => RefOr::Object(unauthorized_response(_gen))},
             ..Default::default()
         })
     }
@@ -126,26 +123,8 @@ fn decode_jwt<T: DeserializeOwned>(
     jwtoken: &str,
     jwt_secret: &jwt::DecodingKey,
 ) -> Result<Claims, Status> {
-    jwt::decode(jwtoken, &jwt_secret, &jwt::Validation::default())
+    jwt::decode(jwtoken, jwt_secret, &jwt::Validation::default())
         .map_err(|_| Status::Unauthorized)
         .map(|data| data.claims)
 }
 
-fn unauthorized_response(gen: &mut OpenApiGenerator) -> OpenApiResponse {
-    let schema = gen.json_schema::<Claims>();
-
-    OpenApiResponse {
-        description: "\
-            # [401 Unauthorized](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401)\n\
-            This response is given when you request a page that you don't have access to \
-            or you have not provided any authentication. "
-            .to_owned(),
-        content: okapi::map! {
-            "application/json".to_owned() => MediaType {
-                schema: Some(schema),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    }
-}
