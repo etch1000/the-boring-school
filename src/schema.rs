@@ -4,7 +4,7 @@ diesel::table! {
     grades (grade_id) {
         grade_id -> Integer,
         student_id -> Integer,
-        class_name -> Text,
+        subject_name -> Text,
         assignment_score -> Integer,
         test_score -> Integer,
     }
@@ -14,16 +14,17 @@ diesel::table! {
     students (student_id) {
         student_id -> Integer,
         student_name -> Text,
+        class_id -> Integer,
         contact_info -> Text,
         email -> Text,
     }
 }
 
 diesel::table! {
-    subs (class_id) {
+    subs (subject_name) {
         class_id -> Integer,
-        class_name -> Text,
-        teacher_id -> Nullable<Integer>,
+        subject_name -> Text,
+        teacher_id -> Integer,
     }
 }
 
@@ -31,7 +32,7 @@ diesel::table! {
     teachers (teacher_id) {
         teacher_id -> Integer,
         teacher_name -> Text,
-        class_name -> Text,
+        subject_name -> Text,
         email -> Text,
     }
 }

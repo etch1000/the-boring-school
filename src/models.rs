@@ -10,7 +10,7 @@ use rocket_sync_db_pools::{database, diesel::SqliteConnection};
 pub struct Grade {
     pub grade_id: i32,
     pub student_id: i32,
-    pub class_name: String,
+    pub subject_name: String,
     pub assignment_score: i32,
     pub test_score: i32,
 }
@@ -21,6 +21,7 @@ pub struct Grade {
 pub struct Student {
     pub student_id: i32,
     pub student_name: String,
+    pub class_id: i32,
     pub contact_info: String,
     pub email: String,
 }
@@ -30,7 +31,7 @@ pub struct Student {
 #[serde(crate = "rocket::serde")]
 pub struct Sub {
     pub class_id: i32,
-    pub class_name: String,
+    pub subject_name: String,
     pub teacher_id: i32,
 }
 
@@ -40,16 +41,9 @@ pub struct Sub {
 pub struct Teacher {
     pub teacher_id: i32,
     pub teacher_name: String,
-    pub class_name: String,
+    pub subject_name: String,
     pub email: String,
 }
 
 #[database("school")]
 pub struct School(SqliteConnection);
-
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
-pub struct TBSError {
-    err: String,
-    code: i32,
-}

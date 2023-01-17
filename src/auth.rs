@@ -1,9 +1,6 @@
 use dotenvy::dotenv;
 use jsonwebtoken as jwt;
-use okapi::openapi3::{
-    Object, Responses, SecurityRequirement, SecurityScheme,
-    SecuritySchemeData,
-};
+use okapi::openapi3::{Object, Responses, SecurityRequirement, SecurityScheme, SecuritySchemeData};
 use rocket::{
     http::Status,
     outcome::Outcome,
@@ -42,9 +39,7 @@ impl<'r> FromRequest<'r> for Claims {
         let result = if let Some(header) = header.strip_prefix("Bearer ") {
             decode_jwt::<Claims>(header, &DECODE_KEY)
         } else {
-            jwt::decode(fail_header, &DECODE_KEY, &jwt::Validation::default())
-                .map_err(|_| Status::Unauthorized)
-                .map(|data| data.claims)
+            decode_jwt::<Claims>(fail_header, &DECODE_KEY)
         };
 
         match result {
@@ -127,4 +122,3 @@ fn decode_jwt<T: DeserializeOwned>(
         .map_err(|_| Status::Unauthorized)
         .map(|data| data.claims)
 }
-
