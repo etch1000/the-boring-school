@@ -13,11 +13,13 @@ use auth::*;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use models::*;
+use rocket::local::blocking::Client;
 use rocket::{response::status, serde::json::Json};
 use rocket_okapi::swagger_ui::make_swagger_ui;
 use rocket_okapi::{openapi, openapi_get_routes};
 use schema::*;
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 use swagger::swag_config;
 
 pub fn establish_connection() -> SqliteConnection {
@@ -29,7 +31,7 @@ pub fn establish_connection() -> SqliteConnection {
 
 #[openapi(tag = "Home")]
 #[get("/")]
-fn home_page() -> &'static str {
+fn home_page(_auth: Claims) -> &'static str {
     "Welcome To The Boring School"
 }
 
@@ -154,13 +156,19 @@ async fn get_all_teachers() -> Json<Vec<Teacher>> {
 
 #[openapi(tag = "GetOp")]
 #[get("/all_teachers_of_class/<class_id>")]
-async fn get_teachers_of_class(class_id: i32) -> Json<Vec<(String, String)>> {
+async fn get_teachers_of_class(class_id: i32) -> Json<Vec<Teacher>> {
     let c = establish_connection();
-    let mut res: Vec<(String, String)> = vec![];
-    let class = subs::table.filter(subs::class_id.eq(class_id)).load::<Sub>(&c).unwrap();
+    let mut res: Vec<Teacher> = vec![];
+    let class = subs::table
+        .filter(subs::class_id.eq(class_id))
+        .load::<Sub>(&c)
+        .unwrap();
     for (_, sub) in class.iter().enumerate() {
-    let teacher_name = teachers::table.filter(teachers::teacher_id.eq(sub.teacher_id)).first::<Teacher>(&c).unwrap().teacher_name;
-        res.push((sub.subject_name.clone(), teacher_name))
+        let teacher = teachers::table
+            .filter(teachers::teacher_id.eq(sub.teacher_id))
+            .first::<Teacher>(&c)
+            .unwrap();
+        res.push(teacher)
     }
     Json(res)
 }
@@ -186,18 +194,14 @@ async fn get_class_sub_teacher(class_id: i32, subject_name: String) -> Json<Teac
 // ACCESSIBLE TO: Principal & Teacher
 #[openapi(tag = "GetOp")]
 #[get("/all_students")]
-async fn get_all_student(
-    auth: Claims,
-) -> Result<Json<Vec<(String, i32)>>, status::Unauthorized<String>> {
+async fn get_all_student(auth: Claims) -> Result<Json<Vec<Student>>, status::Unauthorized<String>> {
     match auth.id {
         3 | 2 => {
             let c = establish_connection();
-            Ok(Json(
-                students::table
-                    .select((students::student_name, students::student_id))
-                    .load::<(String, i32)>(&c)
-                    .unwrap(),
-            ))
+
+            println!("{:#?}", students::table.load::<Student>(&c).unwrap());
+
+            Ok(Json(students::table.load(&c).unwrap()))
         }
         _ => Err(status::Unauthorized(Some(String::from(
             "You are not allowed to do that",
@@ -252,4 +256,409 @@ fn rocket() -> _ {
                 get_grades,
             ],
         )
+}
+
+pub fn current_time() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+}
+
+pub fn get_client() -> Client {
+    Client::tracked(rocket()).expect("Valid Rocket Instance")
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use diesel::result::Error;
+    use rocket::http::Header;
+    use rocket::http::Status;
+
+    #[test]
+    fn test_homepage() {
+        let tbsuser = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(tbsuser).unwrap();
+
+        let client = get_client();
+
+        let res = client
+            .get(uri!(home_page))
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
+
+        assert_eq!(Status::Ok, res.status());
+    }
+
+    #[test]
+    fn test_add_student() {
+        let rancho = Student {
+            student_id: 1000,
+            student_name: String::from("Rancho"),
+            class_id: 1,
+            contact_info: String::from("8770207535"),
+            email: String::from("rancho@hogwarts.com"),
+        };
+
+        let c = establish_connection();
+
+        c.test_transaction::<_, Error, _>(|| {
+            diesel::insert_into(students::table)
+                .values(rancho)
+                .execute(&c)?;
+
+            let all_students_names = students::table
+                .select(students::student_name)
+                .load::<String>(&c)?;
+
+            assert_eq!(
+                vec![
+                    "Harry Potter",
+                    "Ronald Weasley",
+                    "Hermione Granger",
+                    "Rancho"
+                ],
+                all_students_names
+            );
+
+            Ok(())
+        });
+
+        let all_students_names_without_rancho = students::table
+            .select(students::student_name)
+            .load::<String>(&c)
+            .unwrap();
+
+        assert_eq!(
+            vec!["Harry Potter", "Ronald Weasley", "Hermione Granger"],
+            all_students_names_without_rancho
+        );
+    }
+
+    #[test]
+    fn test_add_subject() {
+        let c = establish_connection();
+
+        let new_subject = Sub {
+            class_id: 1,
+            subject_name: String::from("Curses"),
+            teacher_id: 1,
+        };
+
+        c.test_transaction::<_, Error, _>(|| {
+            diesel::insert_into(subs::table)
+                .values(new_subject)
+                .execute(&c)?;
+
+            let all_subs_names = subs::table.select(subs::subject_name).load::<String>(&c)?;
+
+            assert_eq!(vec!["Curses", "Fly Broom", "Potions"], all_subs_names);
+
+            Ok(())
+        });
+
+        let all_subs = subs::table
+            .select(subs::subject_name)
+            .load::<String>(&c)
+            .unwrap();
+
+        assert_eq!(vec!["Fly Broom", "Potions"], all_subs);
+    }
+
+    #[test]
+    fn test_add_teacher() {
+        let c = establish_connection();
+
+        let new_teacher = Teacher {
+            teacher_id: 3,
+            teacher_name: String::from("Rancho"),
+            subject_name: String::from("Macines"),
+            email: String::from("rancho@hogwarts.com"),
+        };
+
+        c.test_transaction::<_, Error, _>(|| {
+            diesel::insert_into(teachers::table)
+                .values(new_teacher)
+                .execute(&c)?;
+
+            let all_teachers_names = teachers::table
+                .select(teachers::teacher_name)
+                .load::<String>(&c)?;
+
+            assert_eq!(
+                vec!["Severous Snape", "Rolanda Hooch", "Rancho"],
+                all_teachers_names
+            );
+
+            Ok(())
+        });
+
+        let all_teachers = teachers::table
+            .select(teachers::teacher_name)
+            .load::<String>(&c)
+            .unwrap();
+
+        assert_eq!(vec!["Severous Snape", "Rolanda Hooch"], all_teachers);
+    }
+
+    #[test]
+    fn test_add_grade() {
+        let c = establish_connection();
+
+        let rancho_grade = Grade {
+            grade_id: 10,
+            student_id: 1000,
+            subject_name: String::from("Machines"),
+            assignment_score: 10,
+            test_score: 100,
+        };
+
+        c.test_transaction::<_, Error, _>(|| {
+            diesel::insert_into(grades::table)
+                .values(rancho_grade)
+                .execute(&c)?;
+
+            let rancho_grade = grades::table
+                .select(grades::subject_name)
+                .filter(grades::student_id.eq(1000))
+                // let res = client.get(uri!(home_page)).dispatch();
+                .load::<String>(&c)?;
+
+            assert_eq!(vec![String::from("Machines")], rancho_grade);
+
+            Ok(())
+        });
+
+        let all_sub_test_scores = grades::table
+            .select(grades::subject_name)
+            .filter(grades::student_id.eq(1))
+            .load::<String>(&c)
+            .unwrap();
+
+        assert_eq!(
+            vec![String::from("Potions"), String::from("Fly Broom")],
+            all_sub_test_scores
+        );
+    }
+
+    #[test]
+    fn test_get_all_students() {
+        let c = get_client();
+
+        use rocket::http::Header;
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let expected_response = vec![
+            Student {
+                student_id: 1,
+                student_name: String::from("Harry Potter"),
+                class_id: 1,
+                contact_info: String::from("8770207535"),
+                email: String::from("harry_potter@hogwarts.com"),
+            },
+            Student {
+                student_id: 2,
+                student_name: String::from("Ronald Weasley"),
+                class_id: 1,
+                contact_info: String::from("9770207535"),
+                email: String::from("ronald_weasley@hogwarts.com"),
+            },
+            Student {
+                student_id: 3,
+                student_name: String::from("Hermione Granger"),
+                class_id: 1,
+                contact_info: String::from("9770207536"),
+                email: String::from("hermione_granger@hogwarts.com"),
+            },
+        ];
+
+        let res = c
+            .get(uri!(get_all_student))
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
+
+        assert_eq!(expected_response, res.into_json::<Vec<Student>>().unwrap());
+    }
+
+    #[test]
+    fn test_get_all_teachers() {
+        let c = get_client();
+
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let expected_result = vec![
+            Teacher {
+                teacher_id: 1,
+                teacher_name: String::from("Severous Snape"),
+                subject_name: String::from("Potions"),
+                email: String::from("halfbloodprince@hogwarts.com"),
+            },
+            Teacher {
+                teacher_id: 2,
+                teacher_name: String::from("Rolanda Hooch"),
+                subject_name: String::from("Fly Broom"),
+                email: String::from("rolandahooch@hogwarts.com"),
+            },
+        ];
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let res = c
+            .get(uri!(super::get_all_teachers))
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
+        // let res = client.get(uri!(home_page)).dispatch();
+
+        assert_eq!(expected_result, res.into_json::<Vec<Teacher>>().unwrap());
+    }
+
+    #[test]
+    fn test_get_grades_for_harry() {
+        let c = get_client();
+
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let expected_result = vec![
+            Grade {
+                grade_id: 1,
+                student_id: 1,
+                subject_name: String::from("Potions"),
+                assignment_score: 10,
+                test_score: 100,
+            },
+            Grade {
+                grade_id: 2,
+                student_id: 1,
+                subject_name: String::from("Fly Broom"),
+                assignment_score: 10,
+                test_score: 100,
+            },
+        ];
+
+        let res = c
+            .get("/grades/1")
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
+
+        assert_eq!(expected_result, res.into_json::<Vec<Grade>>().unwrap())
+    }
+
+    #[test]
+    fn test_class_sub_teacher() {
+        let c = get_client();
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let res = c.get("/teacher/1/Potions").header(Header::new("Authorization", format!("Bearer {jwtoken}"))).dispatch();
+
+        let expected_response = Json(Teacher {
+            teacher_id: 1,
+            teacher_name: String::from("Severous Snape"),
+            subject_name: String::from("Potions"),
+            email: String::from("halfbloodprince@hogwarts.com")
+        });
+
+        assert_eq!(expected_response.into_inner(), res.into_json::<Teacher>().unwrap());
+    }
+
+    #[test]
+    fn test_teachers_of_class_id() {
+        let c = get_client();
+
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let res = c.get("/all_teachers_of_class/1").header(Header::new("Authorization", format!("Bearer {jwtoken}"))).dispatch();
+
+        let expected_response = vec![
+            Teacher {
+                teacher_id: 1,
+                teacher_name: String::from("Severous Snape"),
+                subject_name: String::from("Potions"),
+                email: String::from("halfbloodprince@hogwarts.com"),
+            },
+            Teacher {
+                teacher_id: 2,
+                teacher_name: String::from("Rolanda Hooch"),
+                subject_name: String::from("Fly Broom"),
+                email: String::from("rolandahooch@hogwarts.com"),
+            }
+        ];
+
+        assert_eq!(expected_response, res.into_json::<Vec<Teacher>>().unwrap());
+    }
+
+    #[test]
+    fn test_get_student_hermione() {
+        let c = get_client();
+
+        let auth_user = Claims {
+            id: 3,
+            iat: current_time(),
+            aud: String::from("TBS"),
+            sub: String::from("TBSUSER"),
+            exp: current_time() + 2000,
+        };
+
+        let jwtoken = auth::_encode_jwt(auth_user).unwrap();
+
+        let expected_result = Student {
+            student_id: 3,
+            student_name: String::from("Hermione Granger"),
+            class_id: 1,
+            contact_info: String::from("9770207536"),
+            email: String::from("hermione_granger@hogwarts.com"),
+        };
+
+        let res = c.get("/student/3").header(Header::new(
+            "Authorization",
+            format!("Bearer {jwtoken}")
+        )).dispatch();
+
+        assert_eq!(expected_result, res.into_json::<Student>().unwrap());
+    }
 }

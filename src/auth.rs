@@ -102,7 +102,7 @@ lazy_static::lazy_static! {
     };
 }
 
-fn _encode_jwt(user: Claims) -> Result<String, jwt::errors::Error> {
+pub fn _encode_jwt(user: Claims) -> Result<String, jwt::errors::Error> {
     let user_access = Claims {
         iat: user.iat,
         id: user.id,

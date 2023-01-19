@@ -4,7 +4,7 @@ use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
 use rocket_sync_db_pools::{database, diesel::SqliteConnection};
 
-#[derive(Debug, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Queryable, PartialEq, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = grades)]
 #[serde(crate = "rocket::serde")]
 pub struct Grade {
@@ -15,7 +15,7 @@ pub struct Grade {
     pub test_score: i32,
 }
 
-#[derive(Debug, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, PartialEq, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = students)]
 #[serde(crate = "rocket::serde")]
 pub struct Student {
@@ -26,7 +26,7 @@ pub struct Student {
     pub email: String,
 }
 
-#[derive(Debug, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Queryable, PartialEq, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = subs)]
 #[serde(crate = "rocket::serde")]
 pub struct Sub {
@@ -35,7 +35,7 @@ pub struct Sub {
     pub teacher_id: i32,
 }
 
-#[derive(Debug, Queryable, Insertable, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Queryable, PartialEq, Insertable, Serialize, Deserialize, JsonSchema)]
 #[diesel(table_name = teachers)]
 #[serde(crate = "rocket::serde")]
 pub struct Teacher {
