@@ -9,8 +9,6 @@ extern crate rocket;
 #[macro_use]
 extern crate diesel;
 
-const ERROR = 13;
-
 use auth::*;
 use diesel::prelude::*;
 use dotenvy::dotenv;
@@ -47,6 +45,7 @@ async fn add_subject(
     match auth.id {
         3 | 2 => {
             let c = establish_connection();
+            println!("Hello, world!");
             let res = diesel::insert_into(subs::table)
                 .values(new_subject.into_inner())
                 .execute(&c);
@@ -73,6 +72,7 @@ async fn add_student(
 ) -> Result<status::Created<String>, status::Unauthorized<String>> {
     match auth.id {
         3 | 2 => {
+            println!("Hello, world!");
             let c = establish_connection();
             let res = diesel::insert_into(students::table)
                 .values(new_student.into_inner())
@@ -291,6 +291,46 @@ async fn remove_teacher(
     }
 }
 
+#[openapi(tag = "DeleteOp")]
+#[delete("/grade/<student_name>/<subject_name>")]
+fn remove_grade(
+    auth: Claims,
+    student_name: String,
+    subject_name: String,
+) -> Result<status::Accepted<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let student_id = students::table
+                .filter(students::student_name.eq(student_name))
+                .first::<Student>(&c)
+                .unwrap()
+                .student_id;
+            let grade_id = grades::table
+                .filter(grades::subject_name.eq(subject_name))
+                .filter(grades::student_id.eq(student_id))
+                .first::<Grade>(&c)
+                .unwrap()
+                .grade_id;
+
+            let res = diesel::delete(grades::table.filter(grades::grade_id.eq(grade_id)))
+                .execute(&c)
+                .unwrap();
+
+            match res {
+                1 => Ok(status::Accepted(Some(String::from(
+                    "Grade record was removed",
+                )))),
+                _ => Err(status::Unauthorized(Some(String::from(
+                    "You are not allowed to do that",
+                )))),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
 
 #[launch]
 fn rocket() -> _ {
@@ -313,6 +353,7 @@ fn rocket() -> _ {
                 get_grades,
                 remove_student,
                 remove_teacher,
+                remove_grade,
             ],
         )
 }
