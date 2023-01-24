@@ -9,6 +9,8 @@ extern crate rocket;
 #[macro_use]
 extern crate diesel;
 
+const ERROR = 13;
+
 use auth::*;
 use diesel::prelude::*;
 use dotenvy::dotenv;
@@ -235,6 +237,61 @@ async fn get_grades(student_id: i32) -> Json<Vec<Grade>> {
     )
 }
 
+#[openapi(tag = "DeleteOp")]
+#[delete("/student/<student_id>")]
+async fn remove_student(
+    auth: Claims,
+    student_id: i32,
+) -> Result<status::Accepted<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 => {
+            let c = establish_connection();
+            let res = diesel::delete(students::table.filter(students::student_id.eq(student_id)))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Accepted(Some(String::from(
+                    "Student removed from the records",
+                )))),
+                _ => Err(status::Unauthorized(Some(String::from(
+                    "You are not allowed to do that",
+                )))),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
+#[openapi(tag = "DeleteOp")]
+#[delete("/teacher/<teacher_id>")]
+async fn remove_teacher(
+    auth: Claims,
+    teacher_id: i32,
+) -> Result<status::Accepted<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 => {
+            let c = establish_connection();
+            let res = diesel::delete(teachers::table.filter(teachers::teacher_id.eq(teacher_id)))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Accepted(Some(String::from(
+                    "Teacher was removed from the records",
+                )))),
+                _ => Err(status::Unauthorized(Some(String::from(
+                    "You are not allowed to do that",
+                )))),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
+
 #[launch]
 fn rocket() -> _ {
     rocket::build()
@@ -254,6 +311,8 @@ fn rocket() -> _ {
                 get_teachers_of_class,
                 get_student,
                 get_grades,
+                remove_student,
+                remove_teacher,
             ],
         )
 }
@@ -586,16 +645,22 @@ mod test {
 
         let jwtoken = auth::_encode_jwt(auth_user).unwrap();
 
-        let res = c.get("/teacher/1/Potions").header(Header::new("Authorization", format!("Bearer {jwtoken}"))).dispatch();
+        let res = c
+            .get("/teacher/1/Potions")
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
 
         let expected_response = Json(Teacher {
             teacher_id: 1,
             teacher_name: String::from("Severous Snape"),
             subject_name: String::from("Potions"),
-            email: String::from("halfbloodprince@hogwarts.com")
+            email: String::from("halfbloodprince@hogwarts.com"),
         });
 
-        assert_eq!(expected_response.into_inner(), res.into_json::<Teacher>().unwrap());
+        assert_eq!(
+            expected_response.into_inner(),
+            res.into_json::<Teacher>().unwrap()
+        );
     }
 
     #[test]
@@ -612,7 +677,10 @@ mod test {
 
         let jwtoken = auth::_encode_jwt(auth_user).unwrap();
 
-        let res = c.get("/all_teachers_of_class/1").header(Header::new("Authorization", format!("Bearer {jwtoken}"))).dispatch();
+        let res = c
+            .get("/all_teachers_of_class/1")
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
 
         let expected_response = vec![
             Teacher {
@@ -626,7 +694,7 @@ mod test {
                 teacher_name: String::from("Rolanda Hooch"),
                 subject_name: String::from("Fly Broom"),
                 email: String::from("rolandahooch@hogwarts.com"),
-            }
+            },
         ];
 
         assert_eq!(expected_response, res.into_json::<Vec<Teacher>>().unwrap());
@@ -654,10 +722,10 @@ mod test {
             email: String::from("hermione_granger@hogwarts.com"),
         };
 
-        let res = c.get("/student/3").header(Header::new(
-            "Authorization",
-            format!("Bearer {jwtoken}")
-        )).dispatch();
+        let res = c
+            .get("/student/3")
+            .header(Header::new("Authorization", format!("Bearer {jwtoken}")))
+            .dispatch();
 
         assert_eq!(expected_result, res.into_json::<Student>().unwrap());
     }
