@@ -319,18 +319,104 @@ async fn update_student_name(
 
 // ACCESSIBLE TO: Principal
 #[openapi(tag = "UpdateOp")]
-#[patch("/update_teacher_email/<teacher_name>", format = "json", data = "<new_email_address>")]
-async fn update_teacher_email(auth: Claims, teacher_name: String, new_email_address: Json<String>) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+#[patch(
+    "/update_teacher/email/<teacher_name>",
+    format = "json",
+    data = "<new_email_address>"
+)]
+async fn update_teacher_email(
+    auth: Claims,
+    teacher_name: String,
+    new_email_address: Json<String>,
+) -> Result<status::Custom<String>, status::Unauthorized<String>> {
     match auth.id {
         3 => {
             let c = establish_connection();
-            let res = diesel::update(teachers::table).filter(teachers::teacher_name.eq(teacher_name)).set(teachers::email.eq(new_email_address.into_inner())).execute(&c).unwrap();
+            let res = diesel::update(teachers::table)
+                .filter(teachers::teacher_name.eq(teacher_name))
+                .set(teachers::email.eq(new_email_address.into_inner()))
+                .execute(&c)
+                .unwrap();
             match res {
-                1 => Ok(status::Custom(Status::Ok, String::from("Teacher's email id was successfully updated"))),
-                _ => Ok(status::Custom(Status::NotModified, String::from("Something went wrong and the teacher's email was not changed")))
+                1 => Ok(status::Custom(
+                    Status::Ok,
+                    String::from("Teacher's email id was successfully updated"),
+                )),
+                _ => Ok(status::Custom(
+                    Status::NotModified,
+                    String::from("Something went wrong and the teacher's email was not changed"),
+                )),
             }
         }
-        _ => Err(status::Unauthorized(Some(String::from("You are not allowed to do that"))))
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
+#[openapi(tag = "UpdateOp")]
+#[patch(
+    "/promote_student/class/<student_name>",
+    format = "json",
+    data = "<new_class_id>"
+)]
+async fn update_student_class(
+    auth: Claims,
+    student_name: String,
+    new_class_id: Json<i32>,
+) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let res = diesel::update(students::table)
+                .filter(students::student_name.eq(student_name))
+                .set(students::class_id.eq(new_class_id.into_inner()))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Custom(
+                    Status::Ok,
+                    String::from("Student promoted to new class"),
+                )),
+                _ => Ok(status::Custom(
+                    Status::NotModified,
+                    String::from("Something went wrong and the student's class is unchanged"),
+                )),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
+#[openapi(tag = "UpdateOp")]
+#[patch(
+    "/update_student_contact_info/<student_name>",
+    format = "json",
+    data = "<new_contact_details>"
+)]
+async fn update_student_contact_info(
+    auth: Claims,
+    student_name: String,
+    new_contact_details: Json<String>,
+) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let res = diesel::update(students::table)
+                .filter(students::student_name.eq(student_name))
+                .set(students::contact_info.eq(new_contact_details.into_inner()))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Custom(Status::Ok, String::from("Student's contact details updated successfully"))),
+                _ => Ok(status::Custom(Status::NotModified, String::from("Something went wrong and we are not changing the student's contact details")))
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
     }
 }
 
@@ -451,6 +537,8 @@ fn rocket() -> _ {
                 update_assignment_score,
                 update_student_name,
                 update_teacher_email,
+                update_student_class,
+                update_student_contact_info,
                 remove_student,
                 remove_teacher,
                 remove_grade,
