@@ -420,6 +420,22 @@ async fn update_student_contact_info(
     }
 }
 
+#[openapi(tag = "UpdateOp")]
+#[patch("/update_student_email/<student_name>", format = "json", data = "<student_new_email>")]
+async fn update_student_email(auth: Claims, student_name: String, student_new_email: Json<String>) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let res = diesel::update(students::table).filter(students::student_name.eq(student_name)).set(students::email.eq(student_new_email.into_inner())).execute(&c).unwrap();
+            match res {
+                1 => Ok(status::Custom(Status::Ok, String::from("Student's email was changed succesfully"))),
+                _ => Ok(status::Custom(Status::NotFound, String::from("Something went wrong and we are not changing student's email")))
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from("You are not allowed to do that"))))
+    }
+}
+
 #[openapi(tag = "DeleteOp")]
 #[delete("/student/<student_id>")]
 async fn remove_student(
@@ -539,6 +555,7 @@ fn rocket() -> _ {
                 update_teacher_email,
                 update_student_class,
                 update_student_contact_info,
+                update_student_email,
                 remove_student,
                 remove_teacher,
                 remove_grade,
