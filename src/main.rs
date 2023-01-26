@@ -238,6 +238,25 @@ async fn get_grades(student_id: i32) -> Json<Vec<Grade>> {
     )
 }
 
+#[openapi(tag = "GetOp")]
+#[get("/result/<student_name>")]
+async fn get_result(student_name: String) -> Json<ResultDto> {
+    let c = establish_connection();
+    let sn = student_name.clone();
+    let student_id = students::table.filter(students::student_name.eq(sn)).first::<Student>(&c).unwrap().student_id;
+    let grades: Vec<Grade> = grades::table.filter(grades::student_id.eq(student_id)).load(&c).unwrap();
+    let subjects_taken = grades.len() as i32;
+    let mut res = 0;
+    for (_, sub) in grades.iter().enumerate() {
+        res += sub.test_score
+    }
+
+    Json(ResultDto {
+        student_name,
+        result: (res / subjects_taken)
+    })
+}
+
 #[openapi(tag = "UpdateOp")]
 #[patch(
     "/update_assignment_score/<student_name>/<subject_name>",
@@ -649,6 +668,7 @@ fn rocket() -> _ {
                 get_teachers_of_class,
                 get_student,
                 get_grades,
+                get_result,
                 update_assignment_score,
                 update_student_name,
                 update_teacher_email,

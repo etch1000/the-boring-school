@@ -47,3 +47,11 @@ pub struct Teacher {
 
 #[database("school")]
 pub struct School(SqliteConnection);
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+pub struct ResultDto {
+    pub student_name: String,
+    pub result: i32
+}
+
