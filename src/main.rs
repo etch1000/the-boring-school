@@ -239,7 +239,7 @@ async fn get_grades(student_id: i32) -> Json<Vec<Grade>> {
 }
 
 #[openapi(tag = "UpdateOp")]
-#[put(
+#[patch(
     "/update_assignment_score/<student_name>/<subject_name>",
     format = "json",
     data = "<new_assignment_score>"
