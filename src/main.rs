@@ -492,6 +492,49 @@ async fn update_teacher_subject(
     }
 }
 
+#[openapi(tag = "UpdateOp")]
+#[patch(
+    "/update_test_score/<student_name>/<subject_name>",
+    format = "json",
+    data = "<new_test_score>"
+)]
+async fn update_test_score(
+    auth: Claims,
+    student_name: String,
+    subject_name: String,
+    new_test_score: Json<i32>,
+) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let student_id = students::table
+                .filter(students::student_name.eq(student_name))
+                .first::<Student>(&c)
+                .unwrap()
+                .student_id;
+            let res = diesel::update(grades::table)
+                .filter(grades::student_id.eq(student_id))
+                .filter(grades::subject_name.eq(subject_name))
+                .set(grades::test_score.eq(new_test_score.into_inner()))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Custom(
+                    Status::Ok,
+                    String::from("Student's test score was updated successfully"),
+                )),
+                _ => Ok(status::Custom(
+                    Status::NotModified,
+                    String::from("Something went wrong and student's test score was not changed"),
+                )),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are not allowed to do that",
+        )))),
+    }
+}
+
 #[openapi(tag = "DeleteOp")]
 #[delete("/student/<student_id>")]
 async fn remove_student(
@@ -613,6 +656,7 @@ fn rocket() -> _ {
                 update_student_contact_info,
                 update_student_email,
                 update_teacher_subject,
+                update_test_score,
                 remove_student,
                 remove_teacher,
                 remove_grade,
