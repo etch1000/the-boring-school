@@ -13,6 +13,7 @@ use auth::*;
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use models::*;
+use rocket::http::Status;
 use rocket::local::blocking::Client;
 use rocket::{response::status, serde::json::Json};
 use rocket_okapi::swagger_ui::make_swagger_ui;
@@ -237,6 +238,49 @@ async fn get_grades(student_id: i32) -> Json<Vec<Grade>> {
     )
 }
 
+#[openapi(tag = "UpdateOp")]
+#[put(
+    "/update_assignment_score/<student_name>/<subject_name>",
+    format = "json",
+    data = "<new_assignment_score>"
+)]
+async fn update_assignment_score(
+    auth: Claims,
+    student_name: String,
+    subject_name: String,
+    new_assignment_score: Json<i32>,
+) -> Result<status::Custom<String>, status::Unauthorized<String>> {
+    match auth.id {
+        3 | 2 => {
+            let c = establish_connection();
+            let student_id = students::table
+                .filter(students::student_name.eq(student_name))
+                .first::<Student>(&c)
+                .unwrap()
+                .student_id;
+            let res = diesel::update(grades::table)
+                .filter(grades::student_id.eq(student_id))
+                .filter(grades::subject_name.eq(subject_name))
+                .set(grades::assignment_score.eq(new_assignment_score.into_inner()))
+                .execute(&c)
+                .unwrap();
+            match res {
+                1 => Ok(status::Custom(
+                    Status::Ok,
+                    String::from("Assignment score updated successfully"),
+                )),
+                _ => Ok(status::Custom(
+                    Status::NotModified,
+                    String::from("Something went wrong"),
+                )),
+            }
+        }
+        _ => Err(status::Unauthorized(Some(String::from(
+            "You are note allowed to do that",
+        )))),
+    }
+}
+
 #[openapi(tag = "DeleteOp")]
 #[delete("/student/<student_id>")]
 async fn remove_student(
@@ -351,6 +395,7 @@ fn rocket() -> _ {
                 get_teachers_of_class,
                 get_student,
                 get_grades,
+                update_assignment_score,
                 remove_student,
                 remove_teacher,
                 remove_grade,
